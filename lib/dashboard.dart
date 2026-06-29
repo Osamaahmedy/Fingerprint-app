@@ -5,6 +5,7 @@ import 'package:flutter_application_2666/payrollPage.dart';
 import 'package:flutter_application_2666/workerlist.dart';
 import 'dart:ui';
 import 'package:flutter_application_2666/services/firebase_service.dart';
+import 'package:flutter_application_2666/login.dart' show GlassContainer;
 
 class MainDashboard extends StatefulWidget {
   const MainDashboard({super.key});
@@ -365,34 +366,6 @@ class _DashboardContentState extends State<DashboardContent> {
           Text(title, style: const TextStyle(color: Colors.white70, fontSize: 14)),
           Text(value, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
         ],
-      ),
-    );
-  }
-}
-
-class GlassContainer extends StatelessWidget {
-  final Widget child;
-  final double? width;
-  final double? height;
-
-  const GlassContainer({super.key, required this.child, this.width, this.height});
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          width: width,
-          height: height,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withOpacity(0.2)),
-          ),
-          child: child,
-        ),
       ),
     );
   }

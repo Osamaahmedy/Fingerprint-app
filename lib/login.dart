@@ -215,7 +215,7 @@ class _AuthPageState extends State<AuthPage> with SingleTickerProviderStateMixin
 
           if (_isAdminLogin) {
             // Admin Login
-            if ((username == "admin" && password == "4444") || (username == "" && password == "")) {
+            if (username == "admin" && password == "4444") {
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(builder: (context) => MainDashboard()),

@@ -53,10 +53,19 @@ class _AttendancePageState extends State<AttendancePage> {
           if (activeAttendance.containsKey(workerId)) {
             final record = activeAttendance[workerId]!;
             final status = record['status'] ?? "Present";
+            final hasCheckedOut = record['outTime'] != null && record['outTime'] != "--:--";
             Color color = Colors.greenAccent;
+            String displayStatus = status;
             if (status == "Late") {
               color = Colors.orangeAccent;
+              if (hasCheckedOut) displayStatus = "Late (Out)";
+            } else if (status == "Present") {
+              color = Colors.greenAccent;
+              if (hasCheckedOut) displayStatus = "Present (Out)";
+            } else if (status == "Excused") {
+              color = Colors.blueAccent;
             } else if (status == "Completed" || status == "Checked Out") {
+              // Legacy data support
               color = Colors.blueAccent;
             } else if (status == "Absent") {
               color = Colors.redAccent;
@@ -68,7 +77,7 @@ class _AttendancePageState extends State<AttendancePage> {
               "role": workerRole,
               "in": record['inTime'] ?? "--:--",
               "out": record['outTime'] ?? "--:--",
-              "status": status,
+              "status": displayStatus,
               "color": color,
             });
           } else {
@@ -145,8 +154,14 @@ class _AttendancePageState extends State<AttendancePage> {
   }
 
   Widget _buildStatsDashboard(bool isMobile) {
-    int presentCount = _allAttendanceRecords.where((e) => e['status'] == 'Present' || e['status'] == 'Completed' || e['status'] == 'Checked Out').length;
-    int lateCount = _allAttendanceRecords.where((e) => e['status'] == 'Late').length;
+    int presentCount = _allAttendanceRecords.where((e) {
+      final s = e['status']?.toString() ?? '';
+      return s.startsWith('Present') || s == 'Completed' || s == 'Checked Out';
+    }).length;
+    int lateCount = _allAttendanceRecords.where((e) {
+      final s = e['status']?.toString() ?? '';
+      return s.startsWith('Late');
+    }).length;
     int absentCount = _allAttendanceRecords.where((e) => e['status'] == 'Absent').length;
 
     return Wrap(
@@ -255,10 +270,20 @@ class _AttendancePageState extends State<AttendancePage> {
     ),
   );
 
-  Widget _buildDownloadBtn() => Container(
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(color: Colors.cyanAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(15)),
-    child: const Icon(Icons.file_download_outlined, color: Colors.cyanAccent, size: 20),
+  Widget _buildDownloadBtn() => GestureDetector(
+    onTap: () {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Export feature coming soon!"),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    },
+    child: Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Colors.cyanAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(15)),
+      child: const Icon(Icons.file_download_outlined, color: Colors.cyanAccent, size: 20),
+    ),
   );
 
   Widget _buildAttendanceTable(bool isMobile, double screenWidth) {

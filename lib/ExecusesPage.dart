@@ -51,37 +51,50 @@ class _ExcusesPageState extends State<ExcusesPage> {
     });
   }
 
+  bool _isUpdating = false;
+
   Future<void> _updateExcuseStatus(BuildContext context, String key, Map<String, dynamic> excuse, String newStatus) async {
-    final updatedExcuse = Map<String, dynamic>.from(excuse);
-    updatedExcuse['status'] = newStatus;
-    updatedExcuse.remove('key'); // remove key before sending back
-    
-    setState(() => _isLoading = true);
-    final success = await FirebaseService.updateExcuseStatus(key, newStatus);
-    
-    if (success) {
-      if (newStatus == "Accepted") {
-        final workerId = excuse['workerId']?.toString();
-        final workerName = excuse['workerName']?.toString();
-        final date = excuse['date']?.toString();
-        if (workerId != null && date != null) {
-          final recordId = "${workerId}_$date";
-          await FirebaseService.saveAttendance(recordId, {
-            "workerId": workerId,
-            "workerName": workerName ?? "Unknown",
-            "date": date,
-            "inTime": "--:--",
-            "outTime": "--:--",
-            "status": "Excused",
-          });
+    if (_isUpdating) return; // Prevent double-tap
+    setState(() => _isUpdating = true);
+
+    try {
+      final success = await FirebaseService.updateExcuseStatus(key, newStatus);
+      
+      if (success) {
+        // If accepted, also save attendance record as Excused
+        if (newStatus == "Accepted") {
+          final workerId = excuse['workerId']?.toString();
+          final workerName = excuse['workerName']?.toString();
+          final date = excuse['date']?.toString();
+          if (workerId != null && date != null) {
+            final recordId = "${workerId}_$date";
+            await FirebaseService.saveAttendance(recordId, {
+              "workerId": workerId,
+              "workerName": workerName ?? "Unknown",
+              "date": date,
+              "inTime": "--:--",
+              "outTime": "--:--",
+              "status": "Excused",
+            });
+          }
         }
+
+        // Update local list optimistically instead of full refetch
+        setState(() {
+          final index = _excusesList.indexWhere((e) => e['key'] == key);
+          if (index != -1) {
+            _excusesList[index]['status'] = newStatus;
+          }
+        });
+        if (mounted) _showSnackBar(context, "Request updated to $newStatus!");
+      } else {
+        if (mounted) _showSnackBar(context, "Failed to update request. Please try again.");
       }
-      _showSnackBar(context, "Request updated to $newStatus!");
-    } else {
-      _showSnackBar(context, "Failed to update request. Please try again.");
+    } catch (e) {
+      if (mounted) _showSnackBar(context, "Network error. Please check your connection.");
     }
-    
-    _fetchExcuses();
+
+    setState(() => _isUpdating = false);
   }
 
   @override
@@ -210,8 +223,10 @@ class _ExcusesPageState extends State<ExcusesPage> {
                             backgroundColor: Colors.green.withOpacity(0.7),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
-                          onPressed: () => _updateExcuseStatus(context, data['key'], data, "Accepted"),
-                          child: const Text("Accept", style: TextStyle(color: Colors.white)),
+                          onPressed: _isUpdating ? null : () => _updateExcuseStatus(context, data['key'], data, "Accepted"),
+                          child: _isUpdating
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : const Text("Accept", style: TextStyle(color: Colors.white)),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -222,8 +237,10 @@ class _ExcusesPageState extends State<ExcusesPage> {
                             backgroundColor: Colors.redAccent.withOpacity(0.6),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
-                          onPressed: () => _updateExcuseStatus(context, data['key'], data, "Rejected"),
-                          child: const Text("Reject", style: TextStyle(color: Colors.white)),
+                          onPressed: _isUpdating ? null : () => _updateExcuseStatus(context, data['key'], data, "Rejected"),
+                          child: _isUpdating
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : const Text("Reject", style: TextStyle(color: Colors.white)),
                         ),
                       ),
                     ],

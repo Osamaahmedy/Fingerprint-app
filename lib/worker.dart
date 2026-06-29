@@ -4,13 +4,6 @@ import 'dart:ui';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_application_2666/services/firebase_service.dart';
 
-void main() {
-  runApp(const MaterialApp(
-    debugShowCheckedModeBanner: false,
-    home: Start(),
-  ));
-}
-
 class Start extends StatefulWidget {
   final Map<String, dynamic>? workerData;
   const Start({super.key, this.workerData});
@@ -43,29 +36,45 @@ class _StartState extends State<Start> {
 
   Future<void> _fetchTodayAttendance() async {
     setState(() => _isLoadingStatus = true);
-    final todayDate = "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}";
-    final recordId = "${worker['id']}_$todayDate";
-    final response = await FirebaseService.getAttendance();
-    
-    if (response.containsKey(recordId)) {
-      final record = response[recordId];
-      setState(() {
-        if (record['outTime'] != "--:--") {
-          status = "Checked Out";
-          statusColor = Colors.white70;
-          statusIcon = Icons.exit_to_app;
-        } else {
-          status = record['status'] ?? "Present";
-          statusColor = status == "Late" ? Colors.orangeAccent : Colors.greenAccent;
-          statusIcon = Icons.check_circle_outline;
-        }
-      });
-    } else {
-      setState(() {
-        status = "Absent";
-        statusColor = const Color(0xFFE63946);
-        statusIcon = Icons.cancel_outlined;
-      });
+    try {
+      final todayDate = "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}";
+      final recordId = "${worker['id']}_$todayDate";
+      final response = await FirebaseService.getAttendanceById(recordId);
+      
+      if (response != null) {
+        final record = response;
+        final originalStatus = record['status'] ?? "Present";
+        setState(() {
+          if (record['outTime'] != null && record['outTime'] != "--:--") {
+            // Show original status (Late/Present) along with checkout info
+            if (originalStatus == "Late") {
+              status = "Checked Out (Late)";
+              statusColor = Colors.orangeAccent;
+              statusIcon = Icons.exit_to_app;
+            } else {
+              status = "Checked Out";
+              statusColor = Colors.greenAccent;
+              statusIcon = Icons.exit_to_app;
+            }
+          } else {
+            status = originalStatus;
+            statusColor = originalStatus == "Late" ? Colors.orangeAccent : Colors.greenAccent;
+            statusIcon = Icons.check_circle_outline;
+          }
+        });
+      } else {
+        setState(() {
+          status = "Absent";
+          statusColor = const Color(0xFFE63946);
+          statusIcon = Icons.cancel_outlined;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to fetch attendance status.")),
+        );
+      }
     }
     setState(() => _isLoadingStatus = false);
   }
@@ -153,18 +162,37 @@ class _StartState extends State<Start> {
     );
   }
 
+  String _formatTime(DateTime dt) {
+    final hour = dt.hour;
+    final minute = dt.minute;
+    final period = hour >= 12 ? 'PM' : 'AM';
+    final hour12 = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+    return "${hour12.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} $period";
+  }
+
   Future<void> confirmCheckIn() async {
     setState(() => _isLoadingStatus = true);
     final todayDate = "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}";
     final now = DateTime.now();
-    final inTime = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
+    final inTime = _formatTime(now);
     
+    // Check if already checked in today
+    final recordId = "${worker['id']}_$todayDate";
+    final existingRecord = await FirebaseService.getAttendanceById(recordId);
+    if (existingRecord != null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("You have already checked in today!")),
+      );
+      setState(() => _isLoadingStatus = false);
+      return;
+    }
+
     String newStatus = "Present";
     if (now.hour > 8 || (now.hour == 8 && now.minute > 0)) {
       newStatus = "Late";
     }
 
-    final recordId = "${worker['id']}_$todayDate";
     final success = await FirebaseService.saveAttendance(recordId, {
       "workerId": worker['id'],
       "workerName": worker['name'],
@@ -198,8 +226,8 @@ class _StartState extends State<Start> {
     final todayDate = "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}";
     final recordId = "${worker['id']}_$todayDate";
     
-    final response = await FirebaseService.getAttendance();
-    if (!response.containsKey(recordId)) {
+    final record = await FirebaseService.getAttendanceById(recordId);
+    if (record == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("You must check in first before checking out!")),
@@ -208,8 +236,7 @@ class _StartState extends State<Start> {
       return;
     }
 
-    final record = response[recordId];
-    if (record['outTime'] != "--:--") {
+    if (record['outTime'] != null && record['outTime'] != "--:--") {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("You have already checked out for today!")),
@@ -219,21 +246,28 @@ class _StartState extends State<Start> {
     }
 
     final now = DateTime.now();
-    final outTime = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
+    final outTime = _formatTime(now);
+    final originalStatus = record['status'] ?? "Present";
 
+    // Preserve original status (Late/Present) - don't overwrite with "Completed"
     final success = await FirebaseService.saveAttendance(recordId, {
       "workerId": worker['id'],
       "workerName": worker['name'],
       "date": todayDate,
       "inTime": record['inTime'],
       "outTime": outTime,
-      "status": "Completed",
+      "status": originalStatus,
     });
 
     if (success) {
       setState(() {
-        status = "Checked Out";
-        statusColor = Colors.white70;
+        if (originalStatus == "Late") {
+          status = "Checked Out (Late)";
+          statusColor = Colors.orangeAccent;
+        } else {
+          status = "Checked Out";
+          statusColor = Colors.greenAccent;
+        }
         statusIcon = Icons.exit_to_app;
       });
       if (!mounted) return;
@@ -374,7 +408,7 @@ class _HistoryPageState extends State<HistoryPage> {
         });
 
         final statusVal = value["status"]?.toString().toLowerCase();
-        if (statusVal == "present" || statusVal == "completed") {
+        if (statusVal == "present") {
           present++;
         } else if (statusVal == "late") {
           lateVal++;
@@ -494,7 +528,7 @@ class _UploadExcusePageState extends State<UploadExcusePage> {
 
   Future<void> _pickFile() async {
     final result = await FilePicker.pickFiles();
-    if (result != null && result.files.single.name != null) {
+    if (result != null && result.files.single.name.isNotEmpty) {
       setState(() {
         _fileName = result.files.single.name;
         isUploading = true;
@@ -673,8 +707,15 @@ class _WorkerExcusesPageState extends State<WorkerExcusesPage> {
         : RefreshIndicator(
             onRefresh: _fetchMyExcuses,
             child: _excuses.isEmpty
-              ? const Center(child: Text("No excuses submitted yet.", style: TextStyle(color: Colors.grey)))
+              ? SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.6,
+                    child: const Center(child: Text("No excuses submitted yet.", style: TextStyle(color: Colors.grey))),
+                  ),
+                )
               : ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(25),
                   itemCount: _excuses.length,
                   itemBuilder: (context, index) {
@@ -703,7 +744,9 @@ class _WorkerExcusesPageState extends State<WorkerExcusesPage> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(excuse['type'], style: TextStyle(color: navyRoyal, fontWeight: FontWeight.bold, fontSize: 16)),
+                              Expanded(
+                                child: Text(excuse['type'], style: TextStyle(color: navyRoyal, fontWeight: FontWeight.bold, fontSize: 16)),
+                              ),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
