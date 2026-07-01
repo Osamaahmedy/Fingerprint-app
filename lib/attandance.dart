@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_2666/services/firebase_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class AttendancePage extends StatefulWidget {
   const AttendancePage({super.key});
@@ -79,6 +80,10 @@ class _AttendancePageState extends State<AttendancePage> {
               "out": record['outTime'] ?? "--:--",
               "status": displayStatus,
               "color": color,
+              "inLatitude": record['inLatitude'],
+              "inLongitude": record['inLongitude'],
+              "outLatitude": record['outLatitude'],
+              "outLongitude": record['outLongitude'],
             });
           } else {
             temp.add({
@@ -89,6 +94,10 @@ class _AttendancePageState extends State<AttendancePage> {
               "out": "--:--",
               "status": "Absent",
               "color": Colors.redAccent,
+              "inLatitude": null,
+              "inLongitude": null,
+              "outLatitude": null,
+              "outLongitude": null,
             });
           }
         }
@@ -333,51 +342,192 @@ class _AttendancePageState extends State<AttendancePage> {
     );
   }
 
-  Widget _buildAttendanceRow(Map<String, dynamic> item, bool isMobile) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Row(
-              children: [
-                if (!isMobile) CircleAvatar(
-                  radius: 16,
-                  backgroundColor: item['color'].withOpacity(0.1),
-                  child: Text(item['name'] != null && item['name'].isNotEmpty ? item['name'][0] : "?", style: TextStyle(color: item['color'], fontSize: 12)),
-                ),
-                if (!isMobile) const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(item['name'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
-                      Text("ID: ${item['id']}", style: const TextStyle(color: Colors.white38, fontSize: 10)),
-                    ],
+  Future<void> _openMap(double lat, double lng) async {
+    final Uri url = Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lng");
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Could not open Google Maps")),
+        );
+      }
+    }
+  }
+
+  void _showRecordDetails(Map<String, dynamic> item) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF0C161F),
+          title: Text(item['name'], style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("ID: ${item['id']}", style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              Text("Role: ${item['role']}", style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              const Divider(color: Colors.white24, height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("Check-In Time:", style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  Text(item['in'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+              if (item['inLatitude'] != null && item['inLongitude'] != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _openMap(item['inLatitude'], item['inLongitude']),
+                      icon: const Icon(Icons.map, size: 14),
+                      label: const Text("View Check-In", style: TextStyle(fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.cyanAccent.withOpacity(0.2),
+                        foregroundColor: Colors.cyanAccent,
+                      ),
+                    ),
                   ),
                 ),
-              ],
-            ),
-          ),
-          Expanded(flex: 2, child: Text(item['in'], style: const TextStyle(color: Colors.white70, fontSize: 12))),
-          if (!isMobile) Expanded(flex: 2, child: Text(item['out'], style: const TextStyle(color: Colors.white70, fontSize: 12))),
-          Expanded(
-            flex: 2,
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-              decoration: BoxDecoration(
-                color: item['color'].withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("Check-Out Time:", style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  Text(item['out'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
               ),
-              child: Text(
-                item['status'],
-                textAlign: TextAlign.center,
-                style: TextStyle(color: item['color'], fontSize: 10, fontWeight: FontWeight.bold),
+              if (item['outLatitude'] != null && item['outLongitude'] != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _openMap(item['outLatitude'], item['outLongitude']),
+                      icon: const Icon(Icons.map, size: 14),
+                      label: const Text("View Check-Out", style: TextStyle(fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.cyanAccent.withOpacity(0.2),
+                        foregroundColor: Colors.cyanAccent,
+                      ),
+                    ),
+                  ),
+                ),
+              const Divider(color: Colors.white24, height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("Status:", style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: item['color'].withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      item['status'],
+                      style: TextStyle(color: item['color'], fontWeight: FontWeight.bold, fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Close", style: TextStyle(color: Colors.white54)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildAttendanceRow(Map<String, dynamic> item, bool isMobile) {
+    return InkWell(
+      onTap: () => _showRecordDetails(item),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: Row(
+                children: [
+                  if (!isMobile) CircleAvatar(
+                    radius: 16,
+                    backgroundColor: item['color'].withOpacity(0.1),
+                    child: Text(item['name'] != null && item['name'].isNotEmpty ? item['name'][0] : "?", style: TextStyle(color: item['color'], fontSize: 12)),
+                  ),
+                  if (!isMobile) const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(item['name'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
+                        Text("ID: ${item['id']}", style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
+            Expanded(
+              flex: 2,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(item['in'], style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  if (item['inLatitude'] != null && item['inLongitude'] != null)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4.0),
+                      child: InkWell(
+                        onTap: () => _openMap(item['inLatitude'], item['inLongitude']),
+                        child: const Icon(Icons.location_on, color: Colors.cyanAccent, size: 14),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (!isMobile)
+              Expanded(
+                flex: 2,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(item['out'], style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                    if (item['outLatitude'] != null && item['outLongitude'] != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4.0),
+                        child: InkWell(
+                          onTap: () => _openMap(item['outLatitude'], item['outLongitude']),
+                          child: const Icon(Icons.location_on, color: Colors.cyanAccent, size: 14),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            Expanded(
+              flex: 2,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                decoration: BoxDecoration(
+                  color: item['color'].withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  item['status'],
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: item['color'], fontSize: 10, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

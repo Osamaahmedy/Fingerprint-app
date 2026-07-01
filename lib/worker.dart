@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:ui';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_application_2666/services/firebase_service.dart';
+import 'package:geolocator/geolocator.dart';
 
 class Start extends StatefulWidget {
   final Map<String, dynamic>? workerData;
@@ -170,8 +171,48 @@ class _StartState extends State<Start> {
     return "${hour12.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} $period";
   }
 
+  Future<Position> _determinePosition() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      return Future.error('Location services are disabled. Please enable GPS.');
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        return Future.error('Location permissions are denied.');
+      }
+    }
+    
+    if (permission == LocationPermission.deniedForever) {
+      return Future.error('Location permissions are permanently denied.');
+    } 
+
+    return await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+      timeLimit: const Duration(seconds: 10),
+    );
+  }
+
   Future<void> confirmCheckIn() async {
     setState(() => _isLoadingStatus = true);
+    
+    Position? position;
+    try {
+      position = await _determinePosition();
+    } catch (e) {
+      setState(() => _isLoadingStatus = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Location Error: $e")),
+      );
+      return;
+    }
+
     final todayDate = "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}";
     final now = DateTime.now();
     final inTime = _formatTime(now);
@@ -200,6 +241,8 @@ class _StartState extends State<Start> {
       "inTime": inTime,
       "outTime": "--:--",
       "status": newStatus,
+      "inLatitude": position.latitude,
+      "inLongitude": position.longitude,
     });
 
     if (success) {
@@ -223,6 +266,19 @@ class _StartState extends State<Start> {
 
   Future<void> confirmCheckOut() async {
     setState(() => _isLoadingStatus = true);
+
+    Position? position;
+    try {
+      position = await _determinePosition();
+    } catch (e) {
+      setState(() => _isLoadingStatus = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Location Error: $e")),
+      );
+      return;
+    }
+
     final todayDate = "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}";
     final recordId = "${worker['id']}_$todayDate";
     
@@ -257,6 +313,10 @@ class _StartState extends State<Start> {
       "inTime": record['inTime'],
       "outTime": outTime,
       "status": originalStatus,
+      "inLatitude": record['inLatitude'],
+      "inLongitude": record['inLongitude'],
+      "outLatitude": position.latitude,
+      "outLongitude": position.longitude,
     });
 
     if (success) {

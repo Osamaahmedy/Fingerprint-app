@@ -6,6 +6,7 @@ import 'package:flutter_application_2666/workerlist.dart';
 import 'dart:ui';
 import 'package:flutter_application_2666/services/firebase_service.dart';
 import 'package:flutter_application_2666/login.dart' show GlassContainer;
+import 'package:url_launcher/url_launcher.dart';
 
 class MainDashboard extends StatefulWidget {
   const MainDashboard({super.key});
@@ -215,6 +216,8 @@ class _DashboardContentState extends State<DashboardContent> {
           "name": workerName,
           "in": inTime,
           "status": status,
+          "inLatitude": value['inLatitude'],
+          "inLongitude": value['inLongitude'],
         });
 
         activities.add("$workerName checked in at $inTime today.");
@@ -243,6 +246,19 @@ class _DashboardContentState extends State<DashboardContent> {
         _recentActivities = activities.take(5).toList();
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _openMap(double lat, double lng) async {
+    final Uri url = Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lng");
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Could not open Google Maps")),
+        );
+      }
     }
   }
 
@@ -311,6 +327,15 @@ class _DashboardContentState extends State<DashboardContent> {
                                     ),
                                     title: Text(w['name'], style: const TextStyle(color: Colors.white, fontSize: 14)),
                                     subtitle: Text("Time: ${w['in']} | Status: ${w['status']}", style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                                    trailing: (w['inLatitude'] != null && w['inLongitude'] != null)
+                                      ? Tooltip(
+                                          message: "View check-in location",
+                                          child: IconButton(
+                                            icon: const Icon(Icons.location_on, color: Colors.cyanAccent, size: 18),
+                                            onPressed: () => _openMap(w['inLatitude'], w['inLongitude']),
+                                          ),
+                                        )
+                                      : null,
                                   );
                                 },
                               ),
